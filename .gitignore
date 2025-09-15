@@ -1,0 +1,31 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Test + coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+
+# Data pipeline artifacts
+data_pipeline/transactions.db
+
+# ML integration artifacts
+ml_integration/model/sentiment_model.joblib
+ml_integration/model/metrics.json
+
+# Logs
+*.log
