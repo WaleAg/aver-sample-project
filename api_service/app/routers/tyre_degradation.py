@@ -47,7 +47,10 @@ def predict_tyres(request_id: str, laps: int = 5, _: str = Depends(verify_bearer
     TODO: Replace with real ML model inference and persist to DB.
     """
     if request_id not in _tyre_state:
-        raise HTTPException(status_code=404, detail="request_id not initialized")
+        raise HTTPException(
+        status_code=400,
+        detail=f"Invalid request ID '{request_id}'. You must first call POST /v1/tyre_degragation/init to get a request_id.."
+    )
 
     # Update lap range for this request
     state = _tyre_state[request_id]

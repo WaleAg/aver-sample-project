@@ -2,10 +2,13 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from .routers import laptime_forecasting, tyre_degradation, yellow_flag
 
+from .core.logging_config import setup_logging
+import uuid
 import logging
 import time
 
-logger = logging.getLogger("uvicorn.error")
+logger = logging.getLogger(__name__)
+setup_logging()
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -38,25 +41,23 @@ def create_app() -> FastAPI:
     # Simple latency logging middleware
     @app.middleware("http")
     async def latency_logging(request: Request, call_next):
+        request_id = str(uuid.uuid4())
         start = time.perf_counter()
         response = await call_next(request)
         duration_ms = (time.perf_counter() - start) * 1000
+
         logger.info(
-            json_log(
-                event="request_complete",
-                path=str(request.url.path),
-                method=request.method,
-                status_code=response.status_code,
-                latency_ms=round(duration_ms, 2),
-            )
+            "request",
+            extra={
+                "request_id": request_id,
+                "path": request.url.path,
+                "method": request.method,
+                "status_code": response.status_code,
+                "latency_ms": round(duration_ms, 2),
+            }
         )
         return response
 
     return app
-
-def json_log(**kwargs):
-    # Return a JSON string for structured logs 
-    import json
-    return json.dumps(kwargs)
 
 app = create_app()

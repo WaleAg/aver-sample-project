@@ -78,3 +78,13 @@ PYTHONPATH=. pytest -q
 ## Notes
 
 - All outputs are simulated with random values for demo purposes.
+
+## Notes on Production Hardening
+
+This demo keeps things lightweight, but here are some of the ways I’d extend it in a real production service:
+
+- **Configuration Management:** Move environment variables (like tokens or log levels) into a central Pydantic Settings object.
+- **Structured Logging:** Already implemented with JSON-formatted logs and correlation IDs (`request_id`). In production, this would be extended with centralized log aggregation (e.g., ELK, CloudWatch).
+- **Error Handling:** Implemented with a global exception handler and user-friendly messages for invalid inputs (e.g., unknown `request_id`). In production, this could be extended with richer error codes and domain-specific validation.
+- **Rate Limiting:** Add Redis-backed rate limiting keyed by user/API key to prevent abuse and protect the service.
+- **Idempotency Keys:** Accept an `Idempotency-Key` header for POST requests so client retries don’t accidentally create duplicates.

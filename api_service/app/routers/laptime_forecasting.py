@@ -64,7 +64,10 @@ def get_forecast(request_id: str, _: str = Depends(verify_bearer)):
     Generate predictions for the next laps. Requires a valid request_id.
     """
     if request_id not in _lap_state:
-        raise HTTPException(status_code=404, detail="request_id not initialized")
+        raise HTTPException(
+        status_code=400,
+        detail=f"Invalid request ID '{request_id}'. You must first call POST /v1/laptime_forecasting/init to get a request_id.."
+    )
     _lap_state[request_id] += 1
     return _gen(_lap_state[request_id])
 

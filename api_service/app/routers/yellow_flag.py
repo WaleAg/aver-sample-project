@@ -52,7 +52,10 @@ def predict_yellow_flag(
     TODO: Replace with ML model inference and persist results.
     """
     if request_id not in _yellow_flag_state:
-        raise HTTPException(status_code=404, detail="request_id not initialized")
+        raise HTTPException(
+        status_code=400,
+        detail=f"Invalid request ID '{request_id}'. You must first call POST /v1/yellow_flag/init to get a request_id.."
+    )
 
     # Increment lap counter
     _yellow_flag_state[request_id] += 1
