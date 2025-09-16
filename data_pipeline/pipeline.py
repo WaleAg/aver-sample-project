@@ -1,42 +1,58 @@
-from __future__ import annotations
-
-from pathlib import Path
+import os
+import logging
 import pandas as pd
 from sqlalchemy import create_engine
+from sqlalchemy.exc import SQLAlchemyError
+from dotenv import load_dotenv
 
-try:
-    from tabulate import tabulate
-except ImportError:  # fallback
-    tabulate = None
+# Load config
+load_dotenv()
+DB_URL = os.getenv("DB_URL", "sqlite:///transactions.db")
+DATA_FILE = os.getenv("DATA_FILE", "sample_data.csv")
 
-
-# Paths
-ROOT = Path(__file__).resolve().parent
-DATA_PATH = ROOT / "sample_data.csv"
-DB_PATH = ROOT / "transactions.db"
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 REQUIRED_COLUMNS = {"user_id", "date", "amount"}
 
+def extract(file_path: str = DATA_FILE) -> pd.DataFrame:
+    """Extract data from CSV into a DataFrame."""
+    try:
+        logger.info(f"Extracting data from {file_path}")
+        return pd.read_csv(file_path)
+    except Exception as e:
+        logger.error(f"Failed to extract data: {e}")
+        raise
 
-def extract(path: Path = DATA_PATH) -> pd.DataFrame:
-    """Load raw CSV into a DataFrame."""
-    return pd.read_csv(path)
+def validate(df: pd.DataFrame) -> pd.DataFrame:
+    """Validate schema and critical fields."""
+    logger.info("Validating data schema")
+    if not REQUIRED_COLUMNS.issubset(df.columns):
+        raise ValueError(f"CSV must contain required columns: {REQUIRED_COLUMNS}")
+    
+    # Handle null user_id
+    if df["user_id"].isnull().any():
+        null_count = df["user_id"].isnull().sum()
+        logger.warning(f"Found {null_count} rows with null 'user_id' — dropping them")
+        df = df.dropna(subset=["user_id"])
+    
+    return df
 
 
 def transform(df: pd.DataFrame) -> pd.DataFrame:
     """Clean and aggregate transaction data."""
-    # Validate schema
-    if not REQUIRED_COLUMNS.issubset(df.columns):
-        raise ValueError(f"CSV must contain columns: {REQUIRED_COLUMNS}")
-
-    # Handle missing/invalid values
+    logger.info("Transforming data")
     df = df.dropna(subset=REQUIRED_COLUMNS)
     df["user_id"] = df["user_id"].astype(str)
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
     df = df.dropna(subset=["date", "amount"])
 
-    # Aggregate transactions per user per day
+    # Aggregate
     summary = (
         df.groupby(["user_id", df["date"].dt.date])["amount"]
         .sum()
@@ -45,42 +61,25 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
     )
     return summary
 
+def load(df: pd.DataFrame, db_url: str = DB_URL):
+    """Load data into target database."""
+    try:
+        logger.info("Loading data into database")
+        engine = create_engine(db_url)
+        df.to_sql("transaction_summary", con=engine, if_exists="replace", index=False)
+        logger.info(f"Loaded {len(df)} rows into {db_url}")
+    except SQLAlchemyError as e:
+        logger.error(f"Database error: {e}")
+        raise
 
-
-def load(df: pd.DataFrame, db_path: Path = DB_PATH) -> None:
-    """Load the cleaned summary into SQLite (creates empty table if no rows)."""
-    engine = create_engine(f"sqlite:///{db_path}")
-    with engine.begin() as conn:
-        df.head(0).to_sql("transaction_summary", conn, if_exists="replace", index=False)
-        if not df.empty:
-            df.to_sql("transaction_summary", conn, if_exists="append", index=False)
-
-
-
-def run_pipeline(data_path: Path = DATA_PATH, db_path: Path = DB_PATH):
-    """End-to-end pipeline: extract → transform → load."""
-    raw = extract(data_path)
-    summary = transform(raw)
-    load(summary, db_path)
-    print(f"Pipeline complete. Loaded {len(summary)} rows into {db_path}")
-    return summary
-
-
-
-def get_summary(limit: int = 10) -> pd.DataFrame:
-    """Helper to fetch a few rows from the summary table."""
-    engine = create_engine(f"sqlite:///{DB_PATH}")
-    query = f"SELECT * FROM transaction_summary LIMIT {limit}"
-    return pd.read_sql(query, engine)
-
+def run_pipeline():
+    """Main pipeline entry point."""
+    logger.info("Pipeline started")
+    df = extract(DATA_FILE)
+    df = validate(df)
+    df = transform(df)
+    load(df, DB_URL)
+    logger.info("Pipeline completed successfully")
 
 if __name__ == "__main__":
-    df_summary = run_pipeline()
-    sample = get_summary()
-
-    if tabulate:
-        print("\nSample summary:")
-        print(tabulate(sample, headers="keys", tablefmt="psql", showindex=False))
-    else:
-        print("\nSample summary:")
-        print(sample)
+    run_pipeline()
